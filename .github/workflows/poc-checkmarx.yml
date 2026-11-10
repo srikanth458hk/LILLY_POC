@@ -1,0 +1,55 @@
+name: POC Checkmarx
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  simulated-checkmarx:
+    name: Simulated Checkmarx
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Simulate Checkmarx vulnerability
+        run: |
+          echo "========================================"
+          echo "SIMULATED CHECKMARX SCAN"
+          echo "========================================"
+          echo "High severity vulnerability detected."
+          echo "This is only a POC."
+          echo "========================================"
+
+      - name: Publish Checkmarx failure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const sha = context.payload.pull_request.head.sha;
+
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: sha,
+              state: 'failure',
+              context: 'checkmarx-sast',
+              description: 'Simulated Checkmarx vulnerability detected'
+            });
+
+      - name: Block security policy gate
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const sha = context.payload.pull_request.head.sha;
+
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: sha,
+              state: 'failure',
+              context: 'security-policy-gate',
+              description: 'Security approval or exception required'
+            });

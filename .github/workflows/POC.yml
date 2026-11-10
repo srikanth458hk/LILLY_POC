@@ -1,0 +1,33 @@
+name: POC CI
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Simulate build
+        run: |
+          echo "Running build..."
+          echo "Build completed successfully."
+
+  unit-test:
+    name: unit-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Simulate unit tests
+        run: |
+          echo "Running unit tests..."
+          echo "All unit tests passed."

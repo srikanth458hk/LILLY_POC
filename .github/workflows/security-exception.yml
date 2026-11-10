@@ -1,0 +1,179 @@
+
+name: Security Exception
+
+on:
+  issue_comment:
+    types:
+      - created
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+  statuses: write
+
+jobs:
+  security-exception:
+    if: github.event.issue.pull_request != null
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate security exception
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const command =
+              context.payload.comment.body.trim();
+
+            const pattern =
+              /^\/security-exception INC[0-9]{5,10}$/;
+
+            console.log(
+              `Received exception request: ${command}`
+            );
+
+            /*
+             * STEP 1
+             * Validate command format
+             */
+
+            if (!pattern.test(command)) {
+              core.setFailed(
+                'Invalid command. Expected: /security-exception INC12345'
+              );
+              return;
+            }
+
+            /*
+             * STEP 2
+             * Identify the requester
+             */
+
+            const requester =
+              context.payload.comment.user.login;
+
+            console.log(
+              `Exception requested by: ${requester}`
+            );
+
+            /*
+             * STEP 3
+             * Get repository permission
+             */
+
+            const permissionResponse =
+              await github.rest.repos.getCollaboratorPermissionLevel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username: requester
+              });
+
+            const permission =
+              permissionResponse.data.permission;
+
+            console.log(
+              `Requester permission: ${permission}`
+            );
+
+            const allowedPermissions = [
+              'write',
+              'maintain',
+              'admin'
+            ];
+
+            if (!allowedPermissions.includes(permission)) {
+              core.setFailed(
+                `User ${requester} is not authorised to approve a security exception`
+              );
+              return;
+            }
+
+            /*
+             * STEP 4
+             * Get the Pull Request
+             */
+
+            const prNumber =
+              context.payload.issue.number;
+
+            const prResponse =
+              await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber
+              });
+
+            const sha =
+              prResponse.data.head.sha;
+
+            console.log(
+              `Current PR commit SHA: ${sha}`
+            );
+
+            /*
+             * STEP 5
+             * Confirm Checkmarx failed
+             * for THIS commit
+             */
+
+            const statusResponse =
+              await github.rest.repos.getCombinedStatusForRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: sha
+              });
+
+            const checkmarxStatus =
+              statusResponse.data.statuses.find(
+                status =>
+                  status.context === 'checkmarx-sast'
+              );
+
+            if (!checkmarxStatus) {
+              core.setFailed(
+                'No Checkmarx status exists for the current PR commit'
+              );
+              return;
+            }
+
+            console.log(
+              `Checkmarx status: ${checkmarxStatus.state}`
+            );
+
+            if (checkmarxStatus.state !== 'failure') {
+              core.setFailed(
+                'Security exception is only allowed when Checkmarx has failed'
+              );
+              return;
+            }
+
+            /*
+             * STEP 6
+             * Extract incident number
+             */
+
+            const incident =
+              command.split(' ')[1];
+
+            /*
+             * STEP 7
+             * Approve security policy gate
+             * for CURRENT SHA only
+             */
+
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: sha,
+              state: 'success',
+              context: 'security-policy-gate',
+              description:
+                `Exception ${incident} approved by ${requester}`
+            });
+
+            console.log(
+              `Security exception ${incident} approved`
+            );
+            console.log(
+              `security-policy-gate PASS for ${sha}`
+              );
